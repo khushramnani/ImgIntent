@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from 'react';
 import { Download, ArrowRight, ZoomIn, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -88,6 +90,7 @@ export function ImagePreview({ results }: ImagePreviewProps) {
                   : "border-border/50 hover:border-border"
               )}
             >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={result.originalUrl}
                 alt={`Image ${idx + 1}`}
@@ -108,6 +111,7 @@ export function ImagePreview({ results }: ImagePreviewProps) {
                 <span className="text-sm font-medium text-muted-foreground">Original</span>
               </div>
               <div className="relative aspect-video rounded-xl overflow-hidden bg-muted group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={currentResult.originalUrl}
                   alt="Original"
@@ -141,6 +145,7 @@ export function ImagePreview({ results }: ImagePreviewProps) {
                 </Button>
               </div>
               <div className="relative aspect-video rounded-xl overflow-hidden bg-muted group border-2 border-primary/20">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={currentResult.originalUrl}
                   alt="Transformed"
@@ -162,6 +167,7 @@ export function ImagePreview({ results }: ImagePreviewProps) {
           </div>
         ) : (
           <div className="relative aspect-video rounded-xl overflow-hidden bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={currentResult.originalUrl}
               alt="Preview"

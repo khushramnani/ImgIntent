@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, useRef } from 'react';
 import { Upload, X, ImageIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -97,6 +99,7 @@ export function ImageUploader({
               key={image.id}
               className="relative group aspect-square rounded-xl overflow-hidden bg-muted animate-fade-in"
             >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={image.preview}
                 alt={image.name}

@@ -1,6 +1,7 @@
+"use client";
+
 import { useState, useCallback } from 'react';
-import { TransformOperation, buildImageKitUrl, parseAIResponse, describeOperations } from '@/lib/imagekit';
-import { addToHistory } from '@/lib/storage';
+import { TransformOperation } from '@/lib/imagekit-client';
 import { toast } from 'sonner';
 
 export interface ImageFile {
@@ -8,6 +9,11 @@ export interface ImageFile {
   file: File;
   preview: string;
   name: string;
+  uploaded?: {
+    fileId: string;
+    url: string;
+    filePath: string;
+  };
 }
 
 export interface TransformResult {
@@ -15,11 +21,13 @@ export interface TransformResult {
   transformedUrl: string;
   operations: TransformOperation[];
   description: string;
+  fileName: string;
 }
 
 interface UseImageTransformReturn {
   images: ImageFile[];
   isProcessing: boolean;
+  isUploading: boolean;
   results: TransformResult[];
   addImages: (files: FileList | File[]) => void;
   removeImage: (id: string) => void;
@@ -28,12 +36,10 @@ interface UseImageTransformReturn {
   clearResults: () => void;
 }
 
-// Demo ImageKit endpoint - in production, this would be configured
-const IMAGEKIT_ENDPOINT = 'https://ik.imagekit.io/demo';
-
 export function useImageTransform(): UseImageTransformReturn {
   const [images, setImages] = useState<ImageFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [results, setResults] = useState<TransformResult[]>([]);
 
   const addImages = useCallback((files: FileList | File[]) => {
@@ -81,6 +87,46 @@ export function useImageTransform(): UseImageTransformReturn {
     setResults([]);
   }, [images]);
 
+  const uploadImages = async (imagesToUpload: ImageFile[]) => {
+    const uploadedImages: ImageFile[] = [];
+
+    for (const image of imagesToUpload) {
+      if (image.uploaded) {
+        uploadedImages.push(image);
+        continue;
+      }
+
+      try {
+        const formData = new FormData();
+        formData.append('file', image.file);
+
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error('Upload failed');
+        }
+
+        const data = await response.json();
+        uploadedImages.push({
+          ...image,
+          uploaded: {
+            fileId: data.fileId,
+            url: data.url,
+            filePath: data.filePath,
+          },
+        });
+      } catch (error) {
+        console.error('Upload error:', error);
+        toast.error(`Failed to upload ${image.name}`);
+      }
+    }
+
+    return uploadedImages;
+  };
+
   const processPrompt = useCallback(async (prompt: string) => {
     if (images.length === 0) {
       toast.error('Please upload at least one image');
@@ -90,53 +136,67 @@ export function useImageTransform(): UseImageTransformReturn {
     setIsProcessing(true);
     
     try {
-      // In demo mode, we'll parse the prompt locally
-      // In production, this would call the AI edge function
-      const operations = parseAIResponse(prompt);
-      
-      if (operations.length === 0) {
-        // Default operations if parsing fails
-        operations.push(
-          { type: 'quality', params: { value: 85 } }
-        );
-        toast.info('Using default transformations. Enable Cloud for AI-powered parsing.');
+      // First, upload images if not already uploaded
+      setIsUploading(true);
+      const uploadedImages = await uploadImages(images);
+      setIsUploading(false);
+
+      if (uploadedImages.length === 0) {
+        toast.error('No images uploaded successfully');
+        setIsProcessing(false);
+        return;
       }
 
-      const description = describeOperations(operations);
-      
-      const newResults: TransformResult[] = images.map(img => {
-        // For demo, we'll use the preview URL
-        // In production, this would use the ImageKit uploaded URL
-        const transformedUrl = buildImageKitUrl(
-          IMAGEKIT_ENDPOINT,
-          `/sample.jpg`,
-          operations
-        );
+      // Update images with upload info
+      setImages(uploadedImages);
 
-        // Save to history
-        addToHistory({
-          originalUrl: img.preview,
-          transformedUrl,
+      // Transform images
+      const response = await fetch('/api/transform', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           prompt,
-          operations: JSON.stringify(operations),
-          fileName: img.name,
-        });
-
-        return {
-          originalUrl: img.preview,
-          transformedUrl,
-          operations,
-          description,
-        };
+          images: uploadedImages.map(img => ({
+            url: img.uploaded!.url,
+            filePath: img.uploaded!.filePath,
+            name: img.name,
+          })),
+        }),
       });
 
-      setResults(newResults);
-      toast.success(`Applied: ${description}`);
+      if (!response.ok) {
+        throw new Error('Transform failed');
+      }
+
+      const data = await response.json();
+      setResults(data.results);
+
+      // Save to history
+      for (const result of data.results) {
+        await fetch('/api/history', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            original_url: result.originalUrl,
+            transformed_url: result.transformedUrl,
+            prompt,
+            operations: JSON.stringify(result.operations),
+            file_name: result.fileName,
+          }),
+        }).catch(err => console.error('Failed to save to history:', err));
+      }
+
+      toast.success(`Applied: ${data.description}`);
     } catch (error) {
       console.error('Transform error:', error);
       toast.error('Failed to process transformations');
     } finally {
       setIsProcessing(false);
+      setIsUploading(false);
     }
   }, [images]);
 
@@ -147,6 +207,7 @@ export function useImageTransform(): UseImageTransformReturn {
   return {
     images,
     isProcessing,
+    isUploading,
     results,
     addImages,
     removeImage,

@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useRef, useEffect } from 'react';
 import { Wand2, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
